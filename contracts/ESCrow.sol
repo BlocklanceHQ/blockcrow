@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.19;
+pragma solidity 0.8.20;
 
 // Import necessary libraries
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
@@ -11,8 +11,6 @@ contract BlockCrow is Ownable {
     struct Project {
         string projectDID;
         address freelancer;
-        uint256 totalAmount;
-        uint256 completionTimestamp;
         bool completed;
         mapping(uint256 => uint256) milestones; // milestoneId => amount
     }
@@ -31,18 +29,53 @@ contract BlockCrow is Ownable {
         address _paymentToken,
         bytes32 projectDID,
         address freelancer,
-        uint256 totalAmount,
-        uint256 completionTimestamp
+        uint256[] memory milestones
     ) {
         project = Project({
             projectDID: projectDID,
             freelancer: freelancer,
-            totalAmount: totalAmount,
-            completionTimestamp: completionTimestamp,
-            completed: false,
+            completed: false
         });
 
+        for (uint256 i = 0; i < milestones.length; i++) {
+            project.milestones[i + 1] = milestones[i];
+        }
+
+        paymentToken = IERC20(_paymentToken);
+
         emit ProjectCreated(projectDID, msg.sender, freelancer);
+    }
+
+    function projectDID() external view returns (bytes32) {
+        return project.projectDID;
+    }
+
+    function freelancer() external view returns (address) {
+        return project.freelancer;
+    }
+
+    function balance() external view returns (uint256) {
+        return paymentToken.balanceOf(address(this));
+    }
+
+    function totalMilestones() external view returns (uint256) {
+        return project.milestones.length;
+    }
+
+    function milestoneAmount(uint256 milestoneId) external view returns (uint256) {
+        return project.milestones[milestoneId];
+    }
+
+    function completed() external view returns (bool) {
+        return project.completed;
+    }
+
+    function completionProgress() external view returns (uint256) {
+        for (uint256 i = 1; i <= project.milestones.length; i++) {
+            if (project.milestones[i] > 0) {
+                return i;
+            }
+        }
     }
 
     // Deposit funds into escrow
@@ -56,7 +89,6 @@ contract BlockCrow is Ownable {
     function releaseFunds(bytes32 projectDID, uint256 milestoneId) external {
         require(msg.sender == project.freelancer, "Not authorized");
         require(!project.completed, "Project completed");
-        require(block.timestamp >= project.completionTimestamp, "Project not yet completed");
         require(project.milestones[milestoneId] > 0, "Invalid milestone");
 
         uint256 amount = project.milestones[milestoneId];
